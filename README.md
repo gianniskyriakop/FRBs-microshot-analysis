@@ -1,2 +1,322 @@
-# FRBs-microshot-analysis
-Analysis pipeline for FRB microstructure using WILL, FLITS and wavelet methods.
+# FRB Microshot Analysis with WILL, FLITS, and Wavelets
+
+This repository contains a small analysis pipeline for testing how well different time-domain methods describe complex FRB-like burst structure. The project uses simulated microshot bursts generated with **WILL**, then analyses the resulting burst profiles with **FLITS**, autocorrelation/peak metrics, and wavelet diagnostics.
+
+The main question is:
+
+> Can two bursts have similar apparent timescales but very different internal complexity?
+
+In other words, if two bursts have a similar ACF width or fitted pulse width, can one still be made of a few dominant components while the other is made of many repeated, relatively similar microshots?
+
+The answer from this analysis is yes: a single timescale measurement is not enough to describe the burst morphology. The complexity is better captured by peak statistics, FLITS residuals, and wavelet metrics.
+
+---
+
+## Repository structure
+
+```text
+.
+├── notebooks/
+│   ├── .gitkeep
+│   ├── will_workflow.ipynb
+│   ├── FLITS_analysis.ipynb
+│   └── wavelet_analysis.ipynb
+│
+├── src/
+│   ├── .gitkeep
+│   └── will_pipeline.py
+│
+├── will_outputs/
+│   └── saved WILL simulation products (.npz files)
+│
+├── results/
+│   ├── .gitkeep
+│   ├── FLITS_results/
+│   │   ├── FLITS result tables
+│   │   └── diagnostic plots
+│   │
+│   └── wavelet_results/
+│       ├── wavelet result tables
+│       ├── merged FLITS-wavelet tables
+│       └── diagnostic plots
+│
+└── README.md
+```
+
+---
+
+## Scientific motivation
+
+FRB bursts often show complex time-frequency structure. A burst can look narrow overall, but the emission inside the envelope may consist of several small components or microshots.
+
+A simple width measurement, such as an ACF timescale or a fitted Gaussian/scattering width, may therefore miss important information. This analysis was designed to test that idea in a controlled way.
+
+The strategy was:
+
+1. Simulate FRB-like dynamic spectra with known injected microshot structure.
+2. Keep the individual microshot width fixed.
+3. Vary the number and arrangement of microshots.
+4. Measure whether common timescale metrics distinguish simple and complex bursts.
+5. Compare ACF, peak-count, FLITS, and wavelet-based diagnostics.
+
+---
+
+## Overview of the workflow
+
+The full workflow is:
+
+```text
+WILL simulated burst dynamic spectra
+        ↓
+dedispersed 1D burst profiles
+        ↓
+ACF and peak-complexity metrics
+        ↓
+FLITS single-component temporal fits
+        ↓
+wavelet scalograms and wavelet complexity metrics
+        ↓
+comparison of bursts with similar timescale but different complexity
+```
+
+The notebooks should be run in this order:
+
+1. `will_workflow.ipynb`
+2. `FLITS_analysis.ipynb`
+3. `wavelet_analysis.ipynb`
+
+---
+
+## Notebook 1: WILL microshot simulation
+
+File:
+
+```text
+notebooks/will_workflow.ipynb
+```
+
+This notebook generates simulated FRB-like bursts using WILL.
+
+The simulation setup uses:
+
+```text
+frequency range: 1100–1800 MHz
+number of frequency channels: 128
+time resolution: 0.016 ms
+window duration: 12 ms
+DM: 220 pc cm^-3
+individual microshot width: 0.080 ms
+```
+
+The simulated bursts are built from different numbers of microshots:
+
+```text
+3, 6, 12, 24, 36
+```
+
+and different morphology classes:
+
+```text
+sparse
+moderate
+dense
+clustered
+quasiperiodic
+```
+
+The purpose is not to reproduce one specific observed burst exactly. Instead, the goal is to create a controlled test set where the true injected structure is known.
+
+The notebook then computes initial burst metrics, including:
+
+```text
+acf_sigma_ms
+acf_fwhm_ms
+peak_count
+peak_rate_per_ms
+median_peak_width_ms
+median_sep_ms
+sep_cv
+amplitude_entropy
+amplitude_gini
+complexity_score
+```
+
+Finally, it selects bursts with similar ACF timescales but different complexity and saves the selected bursts as `.npz` files.
+
+Important outputs:
+
+```text
+will_outputs/*.npz
+will_outputs/will_bank_metrics.csv
+will_outputs/will_bank_selected_similar_timescale.csv
+```
+
+---
+
+## Notebook 2: FLITS analysis
+
+File:
+
+```text
+notebooks/FLITS_analysis.ipynb
+```
+
+This notebook loads the saved WILL `.npz` files and fits each burst with a simple FLITS temporal model.
+
+The workflow is:
+
+```text
+saved WILL .npz burst
+→ load dynamic spectrum and simulation truth
+→ fit a simple FLITS scattered-pulse model
+→ compute FLITS residual diagnostics
+→ compute independent ACF/peak-complexity metrics
+→ compare similar-timescale bursts with different peak complexity
+```
+
+The most important FLITS-related quantities are:
+
+```text
+flits_width_ms
+flits_tau_1ghz_ms
+flits_profile_chi2_red
+flits_profile_r_squared
+flits_profile_resid_rms
+flits_profile_quality_flag
+```
+
+The most important independent morphology quantities are:
+
+```text
+acf_sigma_ms
+peak_count
+peak_rate_per_ms
+sep_cv
+t90_ms
+amplitude_entropy
+```
+
+The key point is that FLITS is being used here as a diagnostic model. A poor single-component fit is not necessarily a failure of the analysis. Instead, it tells us that the burst contains structure that cannot be described by one smooth component.
+
+Important outputs:
+
+```text
+results/FLITS_results/flits_microshot_results.csv
+results/FLITS_results/selected_similar_tau_different_peak_count.csv
+results/FLITS_results/selected_similar_tau_different_peak_rate.csv
+results/FLITS_results/selected_similar_tau_different_flits_profile_residual.csv
+```
+
+The notebook also saves diagnostic plots comparing ACF timescale, peak count, peak rate, and FLITS residual quality.
+
+---
+
+## Notebook 3: Wavelet analysis
+
+File:
+
+```text
+notebooks/wavelet_analysis.ipynb
+```
+
+This notebook applies a wavelet analysis to the same simulated bursts.
+
+The workflow is:
+
+```text
+saved WILL .npz bursts
+→ 1D profile + dynamic spectrum
+→ ACF/peak metrics
+→ 1D wavelet scalogram
+→ dynamic-spectrum time-wavelet metric
+→ compare with FLITS residual metrics
+```
+
+The wavelet analysis uses a Mexican-hat/Ricker wavelet. This wavelet responds strongly to localized pulse-like structure, making it useful for detecting short-timescale microstructure.
+
+Important wavelet metrics are:
+
+```text
+wavelet_spikiness
+wavelet_short_energy_ratio
+wavelet_rms
+wavelet_max_abs_coeff
+wavelet_intermittency
+wavelet_mvt_ms
+wavelet_char_scale_ms
+wavelet_scale_entropy
+```
+
+Their interpretation is:
+
+* `wavelet_spikiness`: strength of localized short-timescale structure.
+* `wavelet_short_energy_ratio`: fraction of wavelet power on short scales.
+* `wavelet_mvt_ms`: minimum significant variability timescale.
+* `wavelet_char_scale_ms`: wavelet scale where the excess power is strongest.
+* `wavelet_scale_entropy`: whether the structure is concentrated at one scale or spread across many scales.
+
+Important outputs:
+
+```text
+results/wavelet_results/wavelet_microshot_results.csv
+results/wavelet_results/wavelet_flits_merged_results.csv
+results/wavelet_results/wavelet_metric_correlations.csv
+results/wavelet_results/selected_similar_acf_different_wavelet.csv
+```
+
+The notebook also creates wavelet scalograms and dynamic-spectrum crops for selected bursts.
+
+---
+
+## Main results
+
+The main result is that bursts can have similar measured timescales but very different internal structure.
+
+For example, several selected bursts have similar ACF timescales, but their peak counts and wavelet metrics differ strongly. This means that the apparent width of the burst does not uniquely determine its complexity.
+
+The FLITS analysis also shows that a single-component model often leaves structured residuals. This is expected for bursts made of many microshots. The residuals are therefore useful: they show where a smooth model is insufficient.
+
+The wavelet analysis confirms the same picture from a different angle. Bursts with many repeated components tend to distribute their power differently across wavelet scales compared to bursts dominated by only one or a few sharp peaks.
+
+The strongest conclusion is:
+
+> Burst complexity is not mainly described by one dominant spike or one fitted width. It comes from the repeated arrangement of many relatively similar structures inside the burst envelope.
+
+---
+
+## Interpretation
+
+The ACF gives a useful characteristic timescale, but it compresses the burst into one number. This makes it insensitive to some forms of internal complexity.
+
+Peak-based metrics are more direct. They count how many resolved components are present and how densely they occur inside the burst.
+
+FLITS residuals test whether a simple temporal model can explain the burst. If the residuals are large or structured, then the burst likely contains unresolved or multi-component structure.
+
+Wavelet metrics are especially useful because they preserve both time and scale information. They show whether the burst structure is concentrated at short scales, broad scales, or spread over multiple scales.
+
+Together, the results suggest that a useful description of FRB microstructure should include at least:
+
+```text
+1. a characteristic timescale, such as ACF sigma
+2. a peak-count or peak-rate metric
+3. a residual metric from a simple model
+4. a wavelet-based scale or spikiness metric
+```
+
+Using only one fitted width is not enough.
+
+---
+
+## Summary
+
+This project tests whether FRB burst complexity can be quantified beyond a single width or timescale.
+
+The main findings are:
+
+* ACF timescale alone does not fully describe burst morphology.
+* Bursts with similar ACF width can have very different numbers of peaks.
+* FLITS residuals reveal when a simple smooth model is insufficient.
+* Wavelet metrics capture short-timescale and multi-scale structure.
+* Complexity is often produced by many repeated, relatively similar components rather than by one or two dominant sharp spikes.
+
+The combined WILL, FLITS, and wavelet workflow therefore provides a useful way to separate characteristic timescale from internal burst complexity.
